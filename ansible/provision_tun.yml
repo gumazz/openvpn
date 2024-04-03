@@ -1,0 +1,61 @@
+  - hosts: all
+    vars_files:
+      - main.yml 
+    become: yes
+    tasks:
+    - name: Install packages
+      apt:
+        name:
+          - openvpn
+          - iperf3
+          - selinux-utils
+        state: present
+        update_cache: true
+
+    - name: disable SElinux now
+      shell: setenforce 0
+      ignore_errors: true
+
+  - hosts: server
+    vars_files:
+      - main.yml
+    become: yes
+    tasks:
+    - name: create key file
+      shell: openvpn --genkey secret /etc/openvpn/static.key
+
+    - name: Fetch static key
+      fetch:
+        src: /etc/openvpn/static.key
+        dest: tmp
+
+  - hosts: client
+    become: yes
+    tasks:
+      - name: Copy static key to client VM
+        copy:
+          src: tmp/server/etc/openvpn/static.key
+          dest: /etc/openvpn/static.key
+
+
+  - hosts: all
+    vars_files:
+     - main.yml
+    become: yes
+    tasks:
+
+    - name: create /etc/openvpn/server.conf
+      template:
+        src: server_{{ansible_hostname}}.conf.j2
+        dest: /etc/openvpn/server.conf
+
+    - name: create openvpn.service
+      template:
+        src: openvpn.service
+        dest: "/etc/systemd/system/openvpn@.service"
+
+    - name: enable openvpn
+      service:
+        name: "openvpn@server"
+        state: started
+        enabled: true
